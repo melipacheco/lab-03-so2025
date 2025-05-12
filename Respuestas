@@ -1,0 +1,49 @@
+1. ¿Cuáles son las señales que no es posible atrapar? ¿Por qué?
+Las señales que no pueden ser interceptadas, bloqueadas ni ignoradas son:
+SIGKILL (9): termina el proceso inmediatamente, sin darle oportunidad de reaccionar. El kernel no permite que sea ignorada ni interceptada por razones de control del sistema.
+SIGSTOP (19): detiene (pausa) el proceso de manera forzada.
+Porque el kernel necesita tener control total sobre la ejecución de los procesos.
+Permitir que un proceso ignore SIGKILL o SIGSTOP podría dejar al sistema en un estado inconsistente o inseguro.
+Por ejemplo:
+Un virus podría evitar ser detenido.
+Un proceso zombie podría seguir usando recursos sin control.
+Ambas señales están protegidas porque permiten que el sistema operativo administre procesos de forma segura, incluso si el proceso está mal comportado o bloqueado.
+
+2. 1. Al ejecutar 'ps -fp $(pgrep forkprio)', se observan dos procesos activos: el proceso padre (forkprio) y su proceso hijo.
+El proceso padre aparece con:
+STAT: S → significa "sleeping", es decir, está dormido esperando que pase el tiempo de ejecución antes de enviar SIGTERM.
+TIME: 0:00 → no está usando CPU activamente.
+El proceso hijo aparece con:
+STAT: R → significa "running", es decir, está en ejecución activa haciendo busywork().
+TIME: 0:10 → muestra que acumuló tiempo de CPU (10 segundos en este caso), ya que está continuamente ejecutando instrucciones.
+Esto confirma que el hijo es quien realmente consume CPU, mientras el padre simplemente duerme.
+
+2. 3. Los procesos hijos acumulan mucho más CPU que el padre porque están ejecutando una función busywork() que utiliza activamente el procesador en un bucle continuo. 
+En cambio, el proceso padre simplemente duerme durante los segundos indicados (en este caso, 30), usando sleep(), lo que significa que no consume CPU mientras está dormido.
+El padre actúa solo como coordinador: crea los hijos, espera, y luego les envía SIGTERM para que terminen. 
+Durante ese tiempo está en estado sleeping y prácticamente no genera carga de CPU, lo que se refleja en que su tiempo de CPU (TIME) permanece en cero o muy bajo.
+Por el contrario, los hijos están ocupando el procesador activamente durante los 30 segundos, por eso todos muestran un tiempo de CPU cercano o igual a 30 segundos.
+
+2. 4. Cuando el programa forkprio se ejecuta con la opción de no cambiar prioridades (es decir, todos los hijos tienen nice = 0), el resultado muestra que todos los procesos hijos acumulan prácticamente la misma cantidad de tiempo de CPU.
+Esto se debe a que el planificador del sistema operativo considera que todos los procesos tienen la misma prioridad, y por lo tanto reparte el tiempo de CPU de forma equitativa entre ellos. 
+Al no haber diferencias en el valor de nice, ninguno de los procesos tiene ventaja ni desventaja, lo que se refleja en los tiempos de ejecución muy parejos para todos.
+La ligera variación en los milisegundos entre procesos (por ejemplo, entre 9950 ms y 10020 ms) se debe a factores externos como el estado del sistema, interrupciones de hardware, o pequeñas diferencias en el momento exacto de creación de cada hijo, pero el reparto sigue siendo justo.
+
+4. 1. La creación de hilos tuvo menos costo que la creación de procesos.
+Esto se debe a que los hilos comparten el mismo espacio de direcciones del proceso principal, es decir, comparten la memoria y otros recursos, lo que permite al sistema operativo crearlos de manera más eficiente. En cambio, los procesos requieren replicar estructuras del sistema como el espacio de memoria, la tabla de archivos abiertos y la información del contexto, lo cual representa un costo mayor para el kernel.
+Esto se refleja en los resultados obtenidos:
+real para hilos: 0.24s
+real para procesos: 0.43s
+Además, el tiempo en modo sistema (sys) fue mayor en los procesos (0.42s) comparado con los hilos (0.23s).
+Por lo tanto, los hilos consumen menos recursos, son más livianos, y se crean y gestionan más rápidamente que los procesos.
+
+4. 2. La opción -w (esperar a que cada proceso o hilo finalice antes de continuar) tiene un impacto significativo en procesos, pero mínimo o incluso positivo en hilos.
+En el caso de los procesos:
+Sin -w: real 0.43s
+Con -w: real 1.34s
+Esto ocurre porque con -w, el programa espera de forma secuencial que cada proceso termine, lo que aumenta mucho el tiempo total de ejecución.
+En el caso de los hilos:
+Sin -w: real 0.24s
+Con -w: real 0.19s
+Aunque parezca contradictorio, esperar a que cada hilo finalice puede mejorar la performance general. 
+Esto se debe a que, al no lanzar 10.000 hilos al mismo tiempo, se reduce la carga sobre el planificador del sistema y el uso de memoria, haciendo que todo el programa sea más eficiente.

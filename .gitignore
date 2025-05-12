@@ -68,3 +68,5 @@ benchmark
 sched-threads
 forkprio
 sigcatch
+
+.vscode

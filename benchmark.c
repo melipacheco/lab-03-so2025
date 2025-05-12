@@ -3,9 +3,17 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <signal.h>   
+#include <sys/times.h>
 
 void test_fork(int count, int wait);
 void test_thread(int count, int wait);
+
+void* dummy_thread(void* arg) {
+    // Función ejecutada por cada hilo
+    pthread_exit(NULL);
+    return NULL;
+}
 
 int main(int argc, char *argv[]) 
 {
@@ -46,6 +54,7 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
     
+    time_t inicio = time(NULL);
     if (modo == 'p') {
         printf("Probando fork()...\n");
         test_fork(count, wait);
@@ -53,6 +62,9 @@ int main(int argc, char *argv[])
         printf("Probando pthread_create()...\n");
         test_thread(count, wait);
     }
+    time_t fin = time(NULL);
+    printf("Tiempo: %li\n", fin - inicio);
+
 
     exit(EXIT_SUCCESS);
 }
@@ -62,12 +74,51 @@ int main(int argc, char *argv[])
 //==========================================================================
 void test_fork(int count, int wait)
 {
+    pid_t pids[count];
+    for(int i = 0; i < count; i++){
+        pid_t pid = fork();
+        if (pid == 0) {
+            exit(0);
+        } else {
+            pids[i] = pid;
+            if(wait && i < count-1){
+                waitpid(pid, NULL, 0);            
+            }
+        }     
+    }
 }
 
 //==========================================================================
 // Código para la prueba con pthread_create()
 //==========================================================================
 
-void test_thread(int count, int wait) 
-{
+void test_thread(int count, int wait) {
+    pthread_t threads[count];
+
+    for (int i = 0; i < count; i++) {
+        // Crea el hilo y verifica errores
+        if (pthread_create(&threads[i], NULL, dummy_thread, NULL) != 0) {
+            perror("pthread_create");
+            exit(EXIT_FAILURE);
+        }
+
+        // Si wait está activado, esperamos a que este hilo termine
+        if (wait) {
+            if (pthread_join(threads[i], NULL) != 0) {
+                perror("pthread_join");
+                exit(EXIT_FAILURE);
+            }
+        }
+    }
+
+    // Si no esperamos uno por uno, esperamos a todos al final
+    if (!wait) {
+        for (int i = 0; i < count; i++) {
+            if (pthread_join(threads[i], NULL) != 0) {
+                perror("pthread_join");
+                exit(EXIT_FAILURE);
+            }
+        }
+    }
 }
+
